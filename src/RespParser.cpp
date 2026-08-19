@@ -53,10 +53,19 @@ std::optional<std::vector<std::string>> RespParser::parseArray(size_t& pos) {
 }
 
 
-std::optional<std::vector<std::string>> RespParser::tryParseCommand() {
+std::optional<Command> RespParser::tryParseCommand() {
         size_t pos = 0;
         auto result = parseArray(pos);
+        
         if (!result) return std::nullopt;      // incomplete — buffer untouched
-        m_buffer.erase(0, pos);                  // success — drop consumed bytes
-        return result;
+
+        m_buffer.erase(0, pos);           // success — drop consumed bytes
+
+        Command cmd;
+        cmd.m_name = (*result)[0];
+        for (size_t i = 1; i < result->size(); ++i){
+            cmd.m_args.push_back((*result)[i]);
+        }
+
+        return cmd;
 }

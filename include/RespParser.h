@@ -3,10 +3,11 @@
 #include <string>
 #include <vector>
 #include <optional>
+#include "../include/Command.h"
 
 class RespParser{
     public:
-        std::optional<std::vector<std::string>> tryParseCommand();
+        std::optional<Command> tryParseCommand();
         void feed(const char* bytes, size_t len);
 
     private:
