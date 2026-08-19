@@ -6,6 +6,7 @@
 #include <iostream>
 #include <string>
 #include <signal.h>
+#include "../include/RespParser.h"
 
 Server* Server::m_instance = nullptr;
 
@@ -49,7 +50,6 @@ Server::Server(int port): m_port(port), m_sockfd(-1), m_running(true){
 }
 
 Server::~Server(){
-    std::cout<<"in destructor!!!";
     if (m_sockfd >= 0){
         close(m_sockfd);
     }
@@ -67,21 +67,41 @@ void Server::run(){
             break;
         }
 
+
+        RespParser parser;
         char buffer[1024];
-        int bytes = recv(clientFd, buffer, sizeof(buffer) - 1, 0);
 
-        if(bytes < 0){
-            std::cerr << "recv() failed!";
-            // recv failed so we want to close the clientFd and return to block on accept
-            close(clientFd);
-            continue;
-        }
+        while(true){
+            ssize_t bytes = recv(clientFd, buffer, sizeof(buffer) - 1, 0);
+            if(bytes == 0) break; //no more messages
+            if(bytes < 0){
+                if (errno == EINTR) continue;
+                std::cerr << "recv() failed" << std::endl;
+                break;
+            }
+            parser.feed(buffer, bytes);
+            
+            try{
+                // try and parse the command we received in the socket
+                while(auto tokens = parser.tryParseCommand()){
+                    for(const auto& token : *tokens){
+                        std::cout << token << " ";
+                    }
+                    std::cout << std::endl;
 
-        std::string message(buffer, bytes);
-        std::cout<<"Message recieved! the message is: " << message;
-        
-        if(message.substr(0, 4) == "exit"){
-            m_running = false;
+                    // here we want to execute the command and send back the response to the client
+
+                    //temp
+                    const std::string reply = "+OK\r\n";
+                    send(clientFd, reply.data(), reply.size(), 0);
+                }
+            }catch(const std::exception& e){
+                std::string err = std::string("-ERR ") + e.what() + "\r\n";
+                send(clientFd, err.c_str(), err.size(), 0);
+                break;
+            }
+            
+            
         }
 
         close(clientFd);

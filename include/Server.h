@@ -16,4 +16,7 @@ class Server{
         int m_port;
         int m_sockfd;
         std::atomic<bool> m_running;
+
+        //need to delete copy and assignment, since we keep sockfd, we dont want a copy of it somewhere
+        //else where it can be closed twice
 };
