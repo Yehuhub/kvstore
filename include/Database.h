@@ -27,9 +27,11 @@ class Database{
     std::string type(const std::string& key)const;
     bool del(const std::string& key);
     bool rename(const std::string& oldKey, const std::string& newKey);
+    bool expire(const std::string& key, int seconds);
+
+    // utility functions
     void purgeExpired();
     void debugPrint() const;
-    bool expire(const std::string& key, int seconds);
 
 
     private:

@@ -25,7 +25,7 @@ void Server::setupSignalHandler(){
     sigaction(SIGTERM, &sa, nullptr);
 }
 
-Server::Server(int port): m_port(port), m_sockfd(-1), m_running(true){
+Server::Server(CommandHandler& ch, int port): m_ch(ch), m_port(port), m_sockfd(-1), m_running(true){
     m_instance = this;
     setupSignalHandler();
 
@@ -83,17 +83,10 @@ void Server::run(){
             
             try{
                 // try and parse the command we received in the socket
-                while(auto tokens = parser.tryParseCommand()){
-                    for(const auto& token : *tokens){
-                        std::cout << token << " ";
-                    }
-                    std::cout << std::endl;
-
-                    // here we want to execute the command and send back the response to the client
-
-                    //temp
-                    const std::string reply = "+OK\r\n";
-                    send(clientFd, reply.data(), reply.size(), 0);
+                while(auto cmd = parser.tryParseCommand()){
+                    auto response = m_ch.processCommand(*cmd);
+                    
+                    send(clientFd, response.c_str(), response.size(), 0);
                 }
             }catch(const std::exception& e){
                 std::string err = std::string("-ERR ") + e.what() + "\r\n";
