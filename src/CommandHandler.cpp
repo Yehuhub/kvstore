@@ -5,9 +5,11 @@
 CommandHandler::CommandHandler(Database& db)
     : m_db(db),
       m_handlers{
+        //common
         {"PING", &CommandHandler::handlePing},
         {"ECHO", &CommandHandler::handleEcho},
         {"FLUSHALL", &CommandHandler::handleFlushAll},
+        // kv
         {"SET", &CommandHandler::handleSet},
         {"GET", &CommandHandler::handleGet},
         {"KEYS", &CommandHandler::handleKeys},
@@ -15,6 +17,7 @@ CommandHandler::CommandHandler(Database& db)
         {"DEL", &CommandHandler::handleDel},
         {"RENAME", &CommandHandler::handleRename},
         {"EXPIRE", &CommandHandler::handleExpire},
+        // list
         {"LPUSH", &CommandHandler::handlePush},
         {"RPUSH", &CommandHandler::handlePush},
         {"LPOP", &CommandHandler::handlePop},
@@ -24,6 +27,15 @@ CommandHandler::CommandHandler(Database& db)
         {"LSET", &CommandHandler::handleLset},
         {"LREM", &CommandHandler::handleLrem},
         {"LRANGE", &CommandHandler::handleLrange},
+        // hash
+        {"HSET", &CommandHandler::handleHset},
+        {"HGET", &CommandHandler::handleHget},
+        {"HEXISTS", &CommandHandler::handleHexists},
+        {"HDEL", &CommandHandler::handleHdel},
+        {"HLEN", &CommandHandler::handleHlen},
+        {"HKEYS", &CommandHandler::handleHkeys},
+        {"HVALS", &CommandHandler::handleHvals},
+        {"HGETALL", &CommandHandler::handleHgetall}
 
       }
 {};
@@ -39,7 +51,7 @@ std::string CommandHandler::processCommand(const Command& cmd){
 }
 
 std::string wrongNumOfArguments(const std::string& cmdName){
-    return RespEncoder::encodeError("wrong number of arguments for '" + cmdName + "' command\r\n");
+    return RespEncoder::encodeError("wrong number of arguments for '" + cmdName + "' command");
 }
 
 //===========Command Handler Functions===========
@@ -270,4 +282,103 @@ std::string CommandHandler::handleLrange(const Command& cmd){
         return RespEncoder::encodeError("value is not an integer or out of range");
     }
 }
+
+//-------Hash Operations-------
+
+std::string CommandHandler::handleHset(const Command& cmd){
+    if(cmd.m_args.size() < 3 || cmd.m_args.size() % 2 == 0){
+        return wrongNumOfArguments(cmd.m_name);
+    }
+
+    auto key = cmd.m_args[0];
+    std::vector<std::string> values(cmd.m_args.begin() + 1, cmd.m_args.end());
+
+    auto res = m_db.hset(key, values);
+    return RespEncoder::encodeInt(res);
+}
+
+std::string CommandHandler::handleHget(const Command& cmd){
+    if(cmd.m_args.size() != 2){
+        return wrongNumOfArguments(cmd.m_name);
+    }
+
+    auto key = cmd.m_args[0];
+    auto field = cmd.m_args[1];
+
+    auto res = m_db.hget(key, field);
+
+    return res.has_value() ?
+        RespEncoder::encodeBulkString(*res) :
+        RespEncoder::encodeNullBulkString();
+}
+
+std::string CommandHandler::handleHdel(const Command& cmd){
+    if(cmd.m_args.size() < 2){
+        return wrongNumOfArguments(cmd.m_name);
+    }
+
+    auto key = cmd.m_args[0];
+    std::vector<std::string> fields(cmd.m_args.begin() + 1, cmd.m_args.end());
+
+    auto res = m_db.hdel(key, fields);
+    return RespEncoder::encodeInt(res);
+
+}
+
+std::string CommandHandler::handleHlen(const Command& cmd){
+    if(cmd.m_args.size() != 1){
+        return wrongNumOfArguments(cmd.m_name);
+    }
+
+    auto key = cmd.m_args[0];
+    
+    auto res = m_db.hlen(key);
+    return RespEncoder::encodeInt(res);
+}
+
+std::string CommandHandler::handleHkeys(const Command& cmd){
+    if(cmd.m_args.size() != 1){
+        return wrongNumOfArguments(cmd.m_name);
+    }
+
+    auto key = cmd.m_args[0];
+
+    auto res = m_db.hkeys(key);
+    return RespEncoder::encodeArray(res);
+}
+
+std::string CommandHandler::handleHvals(const Command& cmd){
+    if(cmd.m_args.size() != 1){
+        return wrongNumOfArguments(cmd.m_name);
+    }
+
+    auto key = cmd.m_args[0];
+
+    auto res = m_db.hvals(key);
+    return RespEncoder::encodeArray(res);
+}
+
+std::string CommandHandler::handleHgetall(const Command& cmd){
+    if(cmd.m_args.size() != 1){
+        return wrongNumOfArguments(cmd.m_name);
+    }
+
+    auto key = cmd.m_args[0];
+
+    auto res = m_db.hgetall(key);
+    return RespEncoder::encodeArray(res);
+}
+
+std::string CommandHandler::handleHexists(const Command& cmd){
+    if(cmd.m_args.size() != 2){
+        return wrongNumOfArguments(cmd.m_name);
+    }
+
+    auto key = cmd.m_args[0];
+    auto field = cmd.m_args[1];
+
+    auto res = m_db.hexists(key, field);
+    return RespEncoder::encodeInt(res);
+}
+
 // std::string CommandHandler::handle(const Command& cmd)

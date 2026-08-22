@@ -39,4 +39,14 @@ class CommandHandler{
         std::string handleLset(const Command& cmd);
         std::string handleLrem(const Command& cmd);
         std::string handleLrange(const Command& cmd);
+
+        // hash operations
+        std::string handleHset(const Command& cmd);
+        std::string handleHget(const Command& cmd);
+        std::string handleHexists(const Command& cmd);
+        std::string handleHdel(const Command& cmd);
+        std::string handleHlen(const Command& cmd);
+        std::string handleHkeys(const Command& cmd);
+        std::string handleHvals(const Command& cmd);
+        std::string handleHgetall(const Command& cmd);
 };

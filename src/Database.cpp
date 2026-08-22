@@ -293,6 +293,128 @@ std::vector<std::string> Database::lrange(const std::string& key, int start, int
     return res;
 }
 
+//===============hash operations===============
+
+size_t Database::hset(const std::string& key, const std::vector<std::string>& values){
+    auto it = findAs<std::unordered_map<std::string,std::string>>(key);
+    size_t newEntries = 0;
+
+    if(!it){
+        m_data[key] = std::unordered_map<std::string, std::string>();
+        it = findAs<std::unordered_map<std::string,std::string>>(key);
+    }
+
+
+    for(size_t i = 0; i + 1 < values.size(); i += 2){
+        auto [_, isInserted] = it->insert_or_assign(values[i], values[i+1]);
+        if(isInserted){
+            newEntries++;
+        }
+    }
+
+    return newEntries;
+}
+
+std::optional<std::string> Database::hget(const std::string& key, const std::string& field){
+    auto it = findAs<std::unordered_map<std::string,std::string>>(key);
+
+    if(!it){
+        return std::nullopt;
+    }
+
+    auto f = it->find(field);
+    if(f == it->end()){
+        return std::nullopt;
+    }
+    
+    return f->second;
+}
+
+bool Database::hexists(const std::string& key, const std::string& field){
+    auto it = findAs<std::unordered_map<std::string,std::string>>(key);
+
+    if(!it){
+        return 0;
+    }
+
+    auto found = it->find(field);
+
+    return found != it->end();
+}
+
+size_t Database::hdel(const std::string& key, const std::vector<std::string>& fields){
+    auto it = findAs<std::unordered_map<std::string,std::string>>(key);
+    size_t deletedCount = 0;
+
+    if(!it){
+        return deletedCount;
+    }
+
+    for(const auto& field : fields){
+        deletedCount += it->erase(field);
+    }
+
+    if(it->empty()){
+        m_data.erase(key);
+        m_expiryMap.erase(key);
+    }
+
+    return deletedCount;
+}
+
+size_t Database::hlen(const std::string& key){
+    auto it = findAs<std::unordered_map<std::string,std::string>>(key);
+
+    if(!it){
+        return 0;
+    }
+
+    return it->size();
+}
+
+std::vector<std::string> Database::hkeys(const std::string& key){
+    auto it = findAs<std::unordered_map<std::string,std::string>>(key);
+    std::vector<std::string> res;
+
+    if(!it){
+        return res;
+    }
+
+    for(const auto& [key, _]: *it){
+        res.push_back(key);
+    }
+    return res;
+}
+
+std::vector<std::string> Database::hvals(const std::string& key){
+    auto it = findAs<std::unordered_map<std::string,std::string>>(key);
+    std::vector<std::string> res;
+
+    if(!it){
+        return res;
+    }
+
+    for(const auto& [_, val]: *it){
+        res.push_back(val);
+    }
+    return res;
+}
+
+std::vector<std::string> Database::hgetall(const std::string& key){
+    auto it = findAs<std::unordered_map<std::string,std::string>>(key);
+    std::vector<std::string> res;
+
+    if(!it){
+        return res;
+    }
+    
+    for(const auto& [key, val]: *it){
+        res.push_back(key);
+        res.push_back(val);
+    }
+    return res;
+}
+
 //------debug and printing--------
 
 void Database::debugPrint() const {

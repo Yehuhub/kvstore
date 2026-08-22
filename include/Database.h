@@ -42,6 +42,16 @@ class Database{
     size_t lrem(const std::string& key, int count, const std::string& val);
     std::vector<std::string> lrange(const std::string& key, int start, int stop);
 
+    // hash operations
+    size_t hset(const std::string& key, const std::vector<std::string>& values);
+    std::optional<std::string> hget(const std::string& key, const std::string& field);
+    bool hexists(const std::string& key, const std::string& field);
+    size_t hdel(const std::string& key, const std::vector<std::string>& fields);
+    size_t hlen(const std::string& key);
+    std::vector<std::string> hkeys(const std::string& key);
+    std::vector<std::string> hvals(const std::string& key);
+    std::vector<std::string> hgetall(const std::string& key);
+
     // utility functions
     void purgeExpired();
     void debugPrint() const;
