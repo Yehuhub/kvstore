@@ -39,6 +39,6 @@ redis-cli -p 6379 GET munani
 
 
 # gracefully shutdown server
-echo ========shuttind down server========
+echo ========shutting down server========
 kill -SIGINT $SERVER_PID
 wait $SERVER_PID 2>/dev/null || true

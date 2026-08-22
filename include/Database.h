@@ -6,6 +6,8 @@
 #include <variant>
 #include <optional>
 #include <chrono>
+#include <vector>
+#include <string>
 #include "../include/WrongTypeError.h"
 
 using RedisValue = std::variant<
@@ -28,6 +30,17 @@ class Database{
     bool del(const std::string& key);
     bool rename(const std::string& oldKey, const std::string& newKey);
     bool expire(const std::string& key, int seconds);
+
+    // list operations
+    size_t lpush(const std::string& key, const std::vector<std::string>& values);
+    size_t rpush(const std::string& key, const std::vector<std::string>& values);
+    std::optional<std::string> lpop(const std::string& key);
+    std::optional<std::string> rpop(const std::string& key);
+    size_t llen(const std::string& key);
+    std::optional<std::string> lindex(const std::string& key, int index);
+    bool lset(const std::string& key, int index, const std::string& val);
+    size_t lrem(const std::string& key, int count, const std::string& val);
+    std::vector<std::string> lrange(const std::string& key, int start, int stop);
 
     // utility functions
     void purgeExpired();

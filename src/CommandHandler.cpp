@@ -14,14 +14,37 @@ CommandHandler::CommandHandler(Database& db)
         {"TYPE", &CommandHandler::handleType},
         {"DEL", &CommandHandler::handleDel},
         {"RENAME", &CommandHandler::handleRename},
-        {"EXPIRE", &CommandHandler::handleExpire}
+        {"EXPIRE", &CommandHandler::handleExpire},
+        {"LPUSH", &CommandHandler::handlePush},
+        {"RPUSH", &CommandHandler::handlePush},
+        {"LPOP", &CommandHandler::handlePop},
+        {"RPOP", &CommandHandler::handlePop},
+        {"LLEN", &CommandHandler::handleLlen},
+        {"LINDEX", &CommandHandler::handleLindex},
+        {"LSET", &CommandHandler::handleLset},
+        {"LREM", &CommandHandler::handleLrem},
+        {"LRANGE", &CommandHandler::handleLrange},
+
       }
 {};
+
+std::string CommandHandler::processCommand(const Command& cmd){
+    auto it = m_handlers.find(cmd.m_name);
+    if(it == m_handlers.end()){
+        return RespEncoder::encodeError("unknown command");
+    }
+
+    return (this->*(it->second))(cmd);
+
+}
 
 std::string wrongNumOfArguments(const std::string& cmdName){
     return RespEncoder::encodeError("wrong number of arguments for '" + cmdName + "' command\r\n");
 }
 
+//===========Command Handler Functions===========
+
+//-------Common Commands-------
 std::string CommandHandler::handlePing(const Command& cmd){
     return RespEncoder::encodeSimpleString("PONG");
 }
@@ -42,6 +65,8 @@ std::string CommandHandler::handleFlushAll(const Command& cmd){
     return RespEncoder::encodeSimpleString("OK");
 }
 
+
+//-------KV Operations-------
 std::string CommandHandler::handleSet(const Command& cmd){
     if(cmd.m_args.empty() || cmd.m_args.size() > 2){
         return wrongNumOfArguments(cmd.m_name);
@@ -113,18 +138,136 @@ std::string CommandHandler::handleExpire(const Command& cmd){
         return RespEncoder::encodeInt(success ? 1 : 0);
     }catch(const std::invalid_argument&){
         return RespEncoder::encodeError("invalid expire time in 'expire' command");
-    }catch(const std::out_of_range*){
+    }catch(const std::out_of_range&){
         return RespEncoder::encodeError("invalid expire time in 'expire' command");
     }
 
 }
 
-std::string CommandHandler::processCommand(const Command& cmd){
-    auto it = m_handlers.find(cmd.m_name);
-    if(it == m_handlers.end()){
-        return RespEncoder::encodeError("unknown command");
+//-------List Operations-------
+
+std::string CommandHandler::handlePush(const Command& cmd){
+    if(cmd.m_args.size() <= 1){
+        return wrongNumOfArguments(cmd.m_name);
+    }
+    
+    auto key = cmd.m_args[0];
+    std::vector<std::string> values(cmd.m_args.begin() + 1, cmd.m_args.end());
+    
+    
+    auto length = cmd.m_name == "LPUSH" ?
+    m_db.lpush(key, values) :
+    m_db.rpush(key, values);
+    
+    return RespEncoder::encodeInt(length);
+}
+
+
+std::string CommandHandler::handlePop(const Command& cmd){
+    if(cmd.m_args.size() != 1){
+        return wrongNumOfArguments(cmd.m_name);
+    }
+    
+    auto key = cmd.m_args[0];
+    auto res = cmd.m_name == "LPOP" ? m_db.lpop(key) : m_db.rpop(key);
+    
+    return res.has_value() ?
+    RespEncoder::encodeBulkString(*res) :
+    RespEncoder::encodeNullBulkString(); 
+}
+
+std::string CommandHandler::handleLlen(const Command& cmd){
+    if(cmd.m_args.size() != 1){
+        return wrongNumOfArguments(cmd.m_name);
+    }
+    
+    auto key = cmd.m_args[0];
+    auto res = m_db.llen(key);
+    return RespEncoder::encodeInt(res);
+}
+std::string CommandHandler::handleLindex(const Command& cmd){
+    if(cmd.m_args.size() != 2){
+        return wrongNumOfArguments(cmd.m_name);
     }
 
-    return (this->*(it->second))(cmd);
+    try{
+
+        auto key = cmd.m_args[0];
+        auto index = std::stoi(cmd.m_args[1]);
+        auto res = m_db.lindex(key, index);
+
+        return res.has_value() ?
+            RespEncoder::encodeBulkString(*res) :
+            RespEncoder::encodeNullBulkString();
+    
+    }catch(const std::invalid_argument&){
+        return RespEncoder::encodeError("value is not an integer or out of range");
+    }catch(const std::out_of_range&){
+        return RespEncoder::encodeError("value is not an integer or out of range");
+    }
 
 }
+
+std::string CommandHandler::handleLset(const Command& cmd){
+    if(cmd.m_args.size() != 3){
+        return wrongNumOfArguments(cmd.m_name);
+    }
+
+    try{
+        auto key = cmd.m_args[0];
+        auto index = std::stoi(cmd.m_args[1]);
+        auto val = cmd.m_args[2];
+
+        auto res = m_db.lset(key, index, val);
+
+        return res ?
+            RespEncoder::encodeSimpleString("OK"):
+            RespEncoder::encodeError("no such key or index out of range");
+
+    }catch(const std::invalid_argument&){
+        return RespEncoder::encodeError("value is not an integer or out of range");
+    }catch(const std::out_of_range&){
+        return RespEncoder::encodeError("value is not an integer or out of range");
+    }
+}
+
+std::string CommandHandler::handleLrem(const Command& cmd){
+    if(cmd.m_args.size() != 3){
+        return wrongNumOfArguments(cmd.m_name);
+    }
+
+    try{
+        auto key = cmd.m_args[0];
+        auto count = std::stoi(cmd.m_args[1]);
+        auto val = cmd.m_args[2];
+        
+        auto res = m_db.lrem(key, count, val);
+        return RespEncoder::encodeInt(res);
+        
+    }catch(const std::invalid_argument&){
+        return RespEncoder::encodeError("value is not an integer or out of range");
+    }catch(const std::out_of_range&){
+        return RespEncoder::encodeError("value is not an integer or out of range");
+    }
+}
+
+std::string CommandHandler::handleLrange(const Command& cmd){
+    if(cmd.m_args.size() != 3){
+        return wrongNumOfArguments(cmd.m_name);
+    }
+
+    try{
+        auto key = cmd.m_args[0];
+        auto start = std::stoi(cmd.m_args[1]);
+        auto stop = std::stoi(cmd.m_args[2]);
+
+        auto res = m_db.lrange(key, start, stop);
+        return RespEncoder::encodeArray(res);
+
+    }catch(const std::invalid_argument&){
+        return RespEncoder::encodeError("value is not an integer or out of range");
+    }catch(const std::out_of_range&){
+        return RespEncoder::encodeError("value is not an integer or out of range");
+    }
+}
+// std::string CommandHandler::handle(const Command& cmd)
