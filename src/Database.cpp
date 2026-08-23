@@ -112,6 +112,13 @@ void Database::purgeExpired(){
     }
 }
 
+void Database::handleCleanup(){
+    while(m_running){
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        purgeExpired();
+    }
+}
+
 bool Database::expire(const std::string& key, int seconds){
     std::unique_lock lock(m_dbMutex);
     if(find(key) == nullptr){
@@ -439,4 +446,16 @@ std::vector<std::string> Database::hgetall(const std::string& key)const{
         res.push_back(val);
     }
     return res;
+}
+
+
+Database::Database(){
+    m_cleanupThread = std::thread([this](){
+        handleCleanup();
+    });
+}
+
+Database::~Database(){
+    m_running = false;
+    m_cleanupThread.join();
 }

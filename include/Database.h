@@ -10,6 +10,8 @@
 #include <string>
 #include <shared_mutex>
 #include <mutex>
+#include <atomic>
+#include <thread>
 #include "../include/WrongTypeError.h"
 
 using RedisValue = std::variant<
@@ -21,6 +23,9 @@ using RedisValue = std::variant<
 class Database{
     public:
     
+    Database();
+    ~Database();
+
     // Common commands
     bool flushAll(); 
     
@@ -54,15 +59,15 @@ class Database{
     std::vector<std::string> hvals(const std::string& key)const;
     std::vector<std::string> hgetall(const std::string& key)const;
 
-    // utility functions
-    void purgeExpired();
-
 
     private:
         std::unordered_map<std::string, RedisValue> m_data;
         std::unordered_map<std::string, std::chrono::steady_clock::time_point> m_expiryMap;
 
         mutable std::shared_mutex m_dbMutex;
+        std::atomic<bool> m_running;
+
+        std::thread m_cleanupThread;
 
         template <typename T>
         T* findAs(const std::string& key);
@@ -73,6 +78,8 @@ class Database{
         RedisValue* find(const std::string& key);
         const RedisValue* find(const std::string& key)const;
         bool isExpired(const std::string& key)const;
+        void purgeExpired();
+        void handleCleanup();
 };
 
 template <typename T>

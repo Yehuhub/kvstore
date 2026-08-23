@@ -23,10 +23,10 @@ class Server{
         void setupSignalHandler();
         static Server* m_instance;
 
+        CommandHandler& m_ch;
         int m_port;
         int m_sockfd;
         std::atomic<bool> m_running;
-        CommandHandler& m_ch;
 
         std::unordered_map<std::thread::id, Worker> m_threads;
         std::vector<std::thread::id> m_finishedThreads;
