@@ -8,6 +8,8 @@
 #include <chrono>
 #include <vector>
 #include <string>
+#include <shared_mutex>
+#include <mutex>
 #include "../include/WrongTypeError.h"
 
 using RedisValue = std::variant<
@@ -36,30 +38,31 @@ class Database{
     size_t rpush(const std::string& key, const std::vector<std::string>& values);
     std::optional<std::string> lpop(const std::string& key);
     std::optional<std::string> rpop(const std::string& key);
-    size_t llen(const std::string& key);
-    std::optional<std::string> lindex(const std::string& key, int index);
+    size_t llen(const std::string& key)const;
+    std::optional<std::string> lindex(const std::string& key, int index)const;
     bool lset(const std::string& key, int index, const std::string& val);
     size_t lrem(const std::string& key, int count, const std::string& val);
-    std::vector<std::string> lrange(const std::string& key, int start, int stop);
+    std::vector<std::string> lrange(const std::string& key, int start, int stop)const;
 
     // hash operations
     size_t hset(const std::string& key, const std::vector<std::string>& values);
-    std::optional<std::string> hget(const std::string& key, const std::string& field);
-    bool hexists(const std::string& key, const std::string& field);
+    std::optional<std::string> hget(const std::string& key, const std::string& field)const;
+    bool hexists(const std::string& key, const std::string& field)const;
     size_t hdel(const std::string& key, const std::vector<std::string>& fields);
     size_t hlen(const std::string& key);
-    std::vector<std::string> hkeys(const std::string& key);
-    std::vector<std::string> hvals(const std::string& key);
-    std::vector<std::string> hgetall(const std::string& key);
+    std::vector<std::string> hkeys(const std::string& key)const;
+    std::vector<std::string> hvals(const std::string& key)const;
+    std::vector<std::string> hgetall(const std::string& key)const;
 
     // utility functions
     void purgeExpired();
-    void debugPrint() const;
 
 
     private:
         std::unordered_map<std::string, RedisValue> m_data;
         std::unordered_map<std::string, std::chrono::steady_clock::time_point> m_expiryMap;
+
+        mutable std::shared_mutex m_dbMutex;
 
         template <typename T>
         T* findAs(const std::string& key);

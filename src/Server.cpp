@@ -25,6 +25,53 @@ void Server::setupSignalHandler(){
     sigaction(SIGTERM, &sa, nullptr);
 }
 
+void Server::handleClient(int clientFd){
+    RespParser parser;
+    char buffer[1024];
+
+    while(true){
+        ssize_t bytes = recv(clientFd, buffer, sizeof(buffer) - 1, 0);
+        if(bytes == 0) break; //no more messages
+        if(bytes < 0){
+            if (errno == EINTR) continue;
+            std::cerr << "recv() failed" << std::endl;
+            break;
+        }
+        parser.feed(buffer, bytes);
+        
+        try{
+            // try and parse the command we received in the socket
+            while(auto cmd = parser.tryParseCommand()){
+                auto response = m_ch.processCommand(*cmd);
+                
+                send(clientFd, response.c_str(), response.size(), 0);
+            }
+        }catch(const std::exception& e){
+            std::string err = std::string("-ERR ") + e.what() + "\r\n";
+            send(clientFd, err.c_str(), err.size(), 0);
+            break;
+        }
+        
+    }
+
+
+    close(clientFd);
+    std::lock_guard lock(m_mutex);
+    m_finishedThreads.push_back(std::this_thread::get_id());
+}
+
+void Server::reapFinishedThreads(){
+    std::lock_guard lock(m_mutex);
+    for(auto it = m_finishedThreads.begin(); it != m_finishedThreads.end();){
+        auto t = m_threads.find(*it);
+        if(t != m_threads.end()){
+            t->second.m_thread.join();
+            m_threads.erase(t);
+        }
+        it = m_finishedThreads.erase(it);
+    }
+}
+
 Server::Server(CommandHandler& ch, int port): m_ch(ch), m_port(port), m_sockfd(-1), m_running(true){
     m_instance = this;
     setupSignalHandler();
@@ -50,6 +97,7 @@ Server::Server(CommandHandler& ch, int port): m_ch(ch), m_port(port), m_sockfd(-
 }
 
 Server::~Server(){
+    shutdown();
     if (m_sockfd >= 0){
         close(m_sockfd);
     }
@@ -59,6 +107,7 @@ void Server::run(){
     std::cout<<"Server running on port " << m_port << std::endl;
 
     while (m_running){
+        reapFinishedThreads();
         int clientFd = accept(m_sockfd, nullptr, nullptr);
         if (clientFd < 0){
             if(m_running){
@@ -67,37 +116,26 @@ void Server::run(){
             break;
         }
 
+        std::thread t([this, clientFd]() {
+            handleClient(clientFd);
+        });
 
-        RespParser parser;
-        char buffer[1024];
-
-        while(true){
-            ssize_t bytes = recv(clientFd, buffer, sizeof(buffer) - 1, 0);
-            if(bytes == 0) break; //no more messages
-            if(bytes < 0){
-                if (errno == EINTR) continue;
-                std::cerr << "recv() failed" << std::endl;
-                break;
-            }
-            parser.feed(buffer, bytes);
-            
-            try{
-                // try and parse the command we received in the socket
-                while(auto cmd = parser.tryParseCommand()){
-                    auto response = m_ch.processCommand(*cmd);
-                    
-                    send(clientFd, response.c_str(), response.size(), 0);
-                }
-            }catch(const std::exception& e){
-                std::string err = std::string("-ERR ") + e.what() + "\r\n";
-                send(clientFd, err.c_str(), err.size(), 0);
-                break;
-            }
-            
-            
-        }
-
-        close(clientFd);
+        auto id = t.get_id();
+        m_threads.emplace(id, Worker{std::move(t), clientFd});
     }
 
+}
+
+void Server::shutdown(){
+    m_running = false;
+
+    for(auto& [id, worker] : m_threads){
+        ::shutdown(worker.m_fd, SHUT_RDWR); // c socket shutdown method
+    }
+
+    for(auto& [id, worker] : m_threads){
+        if(worker.m_thread.joinable()){ // safety in case reaper already took this thread
+            worker.m_thread.join();
+        }
+    }
 }

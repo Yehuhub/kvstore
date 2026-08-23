@@ -21,6 +21,7 @@ bool Database::isExpired(const std::string& key)const{
 
 // ===============common commands===============
 bool Database::flushAll(){
+    std::unique_lock lock(m_dbMutex);
     m_data.clear();
     return true;
 }
@@ -28,11 +29,13 @@ bool Database::flushAll(){
 // ===============Key/Value(string) Operations===============
 
 bool Database::set(const std::string& key, const std::string& val){
+    std::unique_lock lock(m_dbMutex);
     m_data[key] = val;
     return true;
 }
 
 std::optional<std::string> Database::get(const std::string& key)const{
+    std::shared_lock lock(m_dbMutex);
     auto it = findAs<std::string>(key);
     if(it){
         return *it;
@@ -41,6 +44,7 @@ std::optional<std::string> Database::get(const std::string& key)const{
 }
 
 std::vector<std::string> Database::keys()const{
+    std::shared_lock lock(m_dbMutex);
     std::vector<std::string> allKeys;
     for(const auto& key : m_data){
         if(!isExpired(key.first))
@@ -50,6 +54,7 @@ std::vector<std::string> Database::keys()const{
 }
 
 std::string Database::type(const std::string& key)const{
+    std::shared_lock lock(m_dbMutex);
     auto val = find(key);
     if(val == nullptr){
         return "none";
@@ -63,6 +68,7 @@ std::string Database::type(const std::string& key)const{
 }
 
 bool Database::del(const std::string& key){
+    std::unique_lock lock(m_dbMutex);
     bool wasLive = find(key) != nullptr;
     m_data.erase(key);
     m_expiryMap.erase(key);
@@ -70,6 +76,7 @@ bool Database::del(const std::string& key){
 }
 
 bool Database::rename(const std::string& oldKey, const std::string& newKey){
+    std::unique_lock lock(m_dbMutex);
     //move the value to the new key
     if(find(oldKey) == nullptr){
         return false;
@@ -93,6 +100,7 @@ bool Database::rename(const std::string& oldKey, const std::string& newKey){
 }
 
 void Database::purgeExpired(){
+    std::unique_lock lock(m_dbMutex);
     auto now = std::chrono::steady_clock::now();
     for(auto it = m_expiryMap.begin(); it != m_expiryMap.end(); ){
         if(now > it->second){
@@ -105,6 +113,7 @@ void Database::purgeExpired(){
 }
 
 bool Database::expire(const std::string& key, int seconds){
+    std::unique_lock lock(m_dbMutex);
     if(find(key) == nullptr){
         return false;
     }
@@ -116,6 +125,7 @@ bool Database::expire(const std::string& key, int seconds){
 //===============list operations===============
 
 size_t Database::lpush(const std::string& key, const std::vector<std::string>& values){
+    std::unique_lock lock(m_dbMutex);
     auto it = findAs<std::deque<std::string>>(key);
 
     if(!it){
@@ -133,6 +143,7 @@ size_t Database::lpush(const std::string& key, const std::vector<std::string>& v
 }
 
 size_t Database::rpush(const std::string& key, const std::vector<std::string>& values){
+    std::unique_lock lock(m_dbMutex);
     auto it = findAs<std::deque<std::string>>(key);
 
     if(!it){
@@ -150,6 +161,7 @@ size_t Database::rpush(const std::string& key, const std::vector<std::string>& v
 }
 
 std::optional<std::string> Database::lpop(const std::string& key){
+    std::unique_lock lock(m_dbMutex);
     auto it = findAs<std::deque<std::string>>(key);
 
     if(!it || it->empty()){
@@ -166,6 +178,7 @@ std::optional<std::string> Database::lpop(const std::string& key){
 }
 
 std::optional<std::string> Database::rpop(const std::string& key){
+    std::unique_lock lock(m_dbMutex);
     auto it = findAs<std::deque<std::string>>(key);
 
     if(!it || it->empty()){
@@ -181,7 +194,8 @@ std::optional<std::string> Database::rpop(const std::string& key){
     return val;
 }
 
-size_t Database::llen(const std::string& key){
+size_t Database::llen(const std::string& key)const{
+    std::shared_lock lock(m_dbMutex);
     auto it = findAs<std::deque<std::string>>(key);
 
     if(!it){
@@ -190,7 +204,8 @@ size_t Database::llen(const std::string& key){
     return it->size();
 }
 
-std::optional<std::string> Database::lindex(const std::string& key, int index){
+std::optional<std::string> Database::lindex(const std::string& key, int index)const{
+    std::shared_lock lock(m_dbMutex);
     auto it = findAs<std::deque<std::string>>(key);
     
     if(!it){
@@ -208,6 +223,7 @@ std::optional<std::string> Database::lindex(const std::string& key, int index){
 }
 
 bool Database::lset(const std::string& key, int index, const std::string& val){
+    std::unique_lock lock(m_dbMutex);
     auto it = findAs<std::deque<std::string>>(key);
 
     if(!it){
@@ -226,6 +242,7 @@ bool Database::lset(const std::string& key, int index, const std::string& val){
 }
 
 size_t Database::lrem(const std::string& key, int count, const std::string& val){
+    std::unique_lock lock(m_dbMutex);
     auto it = findAs<std::deque<std::string>>(key);
 
     if(!it){
@@ -264,7 +281,8 @@ size_t Database::lrem(const std::string& key, int count, const std::string& val)
     return erasedAmount;
 }
 
-std::vector<std::string> Database::lrange(const std::string& key, int start, int stop){
+std::vector<std::string> Database::lrange(const std::string& key, int start, int stop)const{
+    std::shared_lock lock(m_dbMutex);
     auto it = findAs<std::deque<std::string>>(key);
     std::vector<std::string> res;
     
@@ -296,6 +314,7 @@ std::vector<std::string> Database::lrange(const std::string& key, int start, int
 //===============hash operations===============
 
 size_t Database::hset(const std::string& key, const std::vector<std::string>& values){
+    std::unique_lock lock(m_dbMutex);
     auto it = findAs<std::unordered_map<std::string,std::string>>(key);
     size_t newEntries = 0;
 
@@ -315,7 +334,8 @@ size_t Database::hset(const std::string& key, const std::vector<std::string>& va
     return newEntries;
 }
 
-std::optional<std::string> Database::hget(const std::string& key, const std::string& field){
+std::optional<std::string> Database::hget(const std::string& key, const std::string& field)const{
+    std::shared_lock lock(m_dbMutex);
     auto it = findAs<std::unordered_map<std::string,std::string>>(key);
 
     if(!it){
@@ -330,7 +350,8 @@ std::optional<std::string> Database::hget(const std::string& key, const std::str
     return f->second;
 }
 
-bool Database::hexists(const std::string& key, const std::string& field){
+bool Database::hexists(const std::string& key, const std::string& field)const{
+    std::shared_lock lock(m_dbMutex);
     auto it = findAs<std::unordered_map<std::string,std::string>>(key);
 
     if(!it){
@@ -343,6 +364,7 @@ bool Database::hexists(const std::string& key, const std::string& field){
 }
 
 size_t Database::hdel(const std::string& key, const std::vector<std::string>& fields){
+    std::unique_lock lock(m_dbMutex);
     auto it = findAs<std::unordered_map<std::string,std::string>>(key);
     size_t deletedCount = 0;
 
@@ -363,6 +385,7 @@ size_t Database::hdel(const std::string& key, const std::vector<std::string>& fi
 }
 
 size_t Database::hlen(const std::string& key){
+    std::shared_lock lock(m_dbMutex);
     auto it = findAs<std::unordered_map<std::string,std::string>>(key);
 
     if(!it){
@@ -372,7 +395,8 @@ size_t Database::hlen(const std::string& key){
     return it->size();
 }
 
-std::vector<std::string> Database::hkeys(const std::string& key){
+std::vector<std::string> Database::hkeys(const std::string& key)const{
+    std::shared_lock lock(m_dbMutex);
     auto it = findAs<std::unordered_map<std::string,std::string>>(key);
     std::vector<std::string> res;
 
@@ -386,7 +410,8 @@ std::vector<std::string> Database::hkeys(const std::string& key){
     return res;
 }
 
-std::vector<std::string> Database::hvals(const std::string& key){
+std::vector<std::string> Database::hvals(const std::string& key)const{
+    std::shared_lock lock(m_dbMutex);
     auto it = findAs<std::unordered_map<std::string,std::string>>(key);
     std::vector<std::string> res;
 
@@ -400,7 +425,8 @@ std::vector<std::string> Database::hvals(const std::string& key){
     return res;
 }
 
-std::vector<std::string> Database::hgetall(const std::string& key){
+std::vector<std::string> Database::hgetall(const std::string& key)const{
+    std::shared_lock lock(m_dbMutex);
     auto it = findAs<std::unordered_map<std::string,std::string>>(key);
     std::vector<std::string> res;
 
@@ -413,47 +439,4 @@ std::vector<std::string> Database::hgetall(const std::string& key){
         res.push_back(val);
     }
     return res;
-}
-
-//------debug and printing--------
-
-void Database::debugPrint() const {
-    for (const auto& [key, value] : m_data) {
-        std::cout << key << " = ";
-
-        std::visit([](const auto& v) {
-            using T = std::decay_t<decltype(v)>;
-            if constexpr (std::is_same_v<T, std::string>) {
-                std::cout << "\"" << v << "\"";
-            } else if constexpr (std::is_same_v<T, std::deque<std::string>>) {
-                for (size_t i = 0; i < v.size(); ++i) {
-                    std::cout << "\"" << v[i] << "\"";
-                    if (i + 1 < v.size()) std::cout << ", ";
-                }
-                std::cout << "]";
-            } else {
-                std::cout << "{";
-                bool first = true;
-                for (const auto& [field, val] : v) {
-                    if (!first) std::cout << ", ";
-                    std::cout << field << ": \"" << val << "\"";
-                    first = false;
-                }   
-                std::cout << "}";
-            }   
-        }, value);
-
-        auto expIt = m_expiryMap.find(key);
-        if (expIt != m_expiryMap.end()) {
-            if (isExpired(key)) {
-                std::cout << " [EXPIRED, not yet purged]";
-            } else {
-                auto remaining = std::chrono::duration_cast<std::chrono::seconds>(
-                    expIt->second - std::chrono::steady_clock::now()).count();
-                std::cout << " (ttl: " << remaining << "s)";
-            }
-        }
-
-        std::cout << "\n";
-    }
 }
