@@ -15,6 +15,13 @@ class Server{
     public:
         Server(CommandHandler& ch, int port = 6379); //check if ch can be const &
         ~Server();
+
+        Server(const Server&) = delete;
+        Server& operator=(const Server&) = delete;
+
+        Server(Server&&) = delete;
+        Server& operator=(Server&&) = delete;
+
         void run();
         void shutdown();
 
@@ -35,6 +42,4 @@ class Server{
         void handleClient(int clientFd);
         void reapFinishedThreads();
 
-        //need to delete copy and assignment, since we keep sockfd, we dont want a copy of it somewhere
-        //else where it can be closed twice
 };
