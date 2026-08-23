@@ -15,9 +15,10 @@ int main(int argc, char * argv[]){
     }
 
     Database db;
+    db.load("persistence.kv");
     CommandHandler ch = CommandHandler(db);
     Server dbServer(ch, port);
     dbServer.run();
-
+    db.save("persistence.kv");
     
 }

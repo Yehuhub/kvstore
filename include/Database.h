@@ -27,7 +27,11 @@ class Database{
     ~Database();
 
     // Common commands
-    bool flushAll(); 
+    bool flushAll();
+
+    // persistence
+    bool save(const std::string& path)const;
+    bool load(const std::string& path);
     
     // key/val operations
     bool set(const std::string& key, const std::string& val);

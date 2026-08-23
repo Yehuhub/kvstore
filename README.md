@@ -15,7 +15,7 @@ This project is a small Redis clone written in C++. It runs a TCP server and spe
 
 Each client connection is handled on its own thread, and the data store is guarded by a `shared_mutex` so reads can happen concurrently while writes stay exclusive.
 
-There is currently no persistence — all data lives in memory and is lost when the server stops.
+Data is persisted to a `persistence.kv` file in the working directory: it's loaded on startup and saved on graceful shutdown (`Ctrl+C`). Keys with a TTL keep expiring correctly across restarts, since expiry timestamps are converted between `steady_clock` (used at runtime) and wall-clock time (used on disk).
 
 ---
 
@@ -143,6 +143,7 @@ OK
 - **RespParser / RespEncoder** – convert between raw RESP protocol bytes and `Command` objects / reply strings.
 - **CommandHandler** – takes a parsed `Command`, looks up the right handler in a name → member-function-pointer map, and calls it against the `Database`.
 - **Database** – stores everything in a single `unordered_map<string, RedisValue>`, where `RedisValue` is a `variant<string, deque<string>, unordered_map<string,string>>` (covers string/list/hash). A `shared_mutex` protects it: reads take a shared lock, writes take an exclusive lock, so multiple clients can read at the same time but writes are serialized.
+- **Persistence** – `Database::save`/`Database::load` (de)serialize `m_data` and `m_expiryMap` to a simple line-based text format (magic header, entry count, then per-key type/name/expiry followed by the value). `save` writes to a temp file and renames it into place to avoid a partial/corrupt file if the process dies mid-write. `main.cpp` calls `load("persistence.kv")` before starting the server and `save("persistence.kv")` after `dbServer.run()` returns (i.e. on graceful shutdown).
 
 ## Concepts & Use Cases
 

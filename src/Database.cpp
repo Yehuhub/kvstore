@@ -1,6 +1,8 @@
 #include "../include/Database.h"
 #include <iostream>
 #include <algorithm>
+#include <fstream>
+#include <cstdio>
 
 RedisValue* Database::find(const std::string& key){
     auto it = m_data.find(key);
@@ -23,6 +25,185 @@ bool Database::isExpired(const std::string& key)const{
 bool Database::flushAll(){
     std::unique_lock lock(m_dbMutex);
     m_data.clear();
+    return true;
+}
+
+// ===============persistence===============
+
+namespace {
+    // steady_clock has no fixed epoch, so a time_point from it can't be written to
+    // disk and read back later
+
+    long toEpochSeconds(const std::chrono::steady_clock::time_point& expiry,
+                        const std::chrono::steady_clock::time_point& steadyNow,
+                        const std::chrono::system_clock::time_point& sysNow){
+        auto remaining = expiry - steadyNow;
+        auto wallExpiry = sysNow + remaining;
+        return static_cast<long>(
+            std::chrono::duration_cast<std::chrono::seconds>(wallExpiry.time_since_epoch()).count()
+        );
+    }
+
+    // nullopt means "no expiry" (seconds == 0) or "already expired" - both cases
+    // where the caller should just drop the key instead of storing a time_point.
+    std::optional<std::chrono::steady_clock::time_point> fromEpochSeconds(
+            long seconds,
+            const std::chrono::steady_clock::time_point& steadyNow,
+            const std::chrono::system_clock::time_point& sysNow){
+        if(seconds == 0) return std::nullopt;
+
+        auto wallExpiry = std::chrono::system_clock::time_point(std::chrono::seconds(seconds));
+        if(wallExpiry <= sysNow) return std::nullopt;
+
+        return steadyNow + (wallExpiry - sysNow);
+    }
+
+    void writeValue(std::ofstream& out, const RedisValue& value){
+        if(const auto* s = std::get_if<std::string>(&value)){
+            out << *s << "\n";
+        }else if(const auto* list = std::get_if<std::deque<std::string>>(&value)){
+            out << list->size() << "\n";
+            for(const auto& item : *list){
+                out << item << "\n";
+            }
+        }else if(const auto* hash = std::get_if<std::unordered_map<std::string,std::string>>(&value)){
+            out << hash->size() << "\n";
+            for(const auto& [field, val] : *hash){
+                out << field << "\n" << val << "\n";
+            }
+        }
+    }
+
+    RedisValue readValue(std::ifstream& in, const std::string& type){
+        if(type == "string"){
+            std::string val;
+            std::getline(in, val);
+            return val;
+        }
+
+        if(type == "list"){
+            std::string countLine;
+            std::getline(in, countLine);
+            size_t n = std::stoul(countLine);
+
+            std::deque<std::string> d;
+            for(size_t i = 0; i < n; i++){
+                std::string item;
+                std::getline(in, item);
+                d.push_back(item);
+            }
+            return d;
+        }
+
+        // type == "hash"
+        std::string countLine;
+        std::getline(in, countLine);
+        size_t n = std::stoul(countLine);
+
+        std::unordered_map<std::string, std::string> h;
+        for(size_t i = 0; i < n; i++){
+            std::string field, val;
+            std::getline(in, field);
+            std::getline(in, val);
+            h[field] = val;
+        }
+        return h;
+    }
+}
+
+bool Database::save(const std::string& path)const{
+    std::shared_lock lock(m_dbMutex);
+
+    std::string tmpPath = path + ".tmp";
+    std::ofstream out(tmpPath);
+    if(!out) return false;
+
+    out << "KVDB1\n";
+
+    size_t liveCount = 0;
+    for(const auto& [key, value] : m_data){
+        if(!isExpired(key)) liveCount++;
+    }
+    out << liveCount << "\n";
+
+    auto steadyNow = std::chrono::steady_clock::now();
+    auto sysNow = std::chrono::system_clock::now();
+
+    for(const auto& [key, value] : m_data){
+        if(isExpired(key)) continue;
+
+        long expirySeconds = 0;
+        auto expIt = m_expiryMap.find(key);
+        if(expIt != m_expiryMap.end()){
+            expirySeconds = toEpochSeconds(expIt->second, steadyNow, sysNow);
+        }
+
+        std::string type;
+        if(std::holds_alternative<std::string>(value)) type = "string";
+        else if(std::holds_alternative<std::deque<std::string>>(value)) type = "list";
+        else type = "hash";
+
+        out << type << "\n" << key << "\n" << expirySeconds << "\n";
+        writeValue(out, value);
+    }
+
+    out.close();
+    if(!out) return false;
+
+    if(std::rename(tmpPath.c_str(), path.c_str()) != 0){
+        return false;
+    }
+
+    return true;
+}
+
+bool Database::load(const std::string& path){
+    std::ifstream in(path);
+    if(!in) return false;
+
+    std::string magic;
+    std::getline(in, magic);
+    if(magic != "KVDB1") return false;
+
+    std::string countLine;
+    std::getline(in, countLine);
+    size_t count = std::stoul(countLine);
+
+    std::unordered_map<std::string, RedisValue> newData;
+    std::unordered_map<std::string, std::chrono::steady_clock::time_point> newExpiry;
+
+    auto steadyNow = std::chrono::steady_clock::now();
+    auto sysNow = std::chrono::system_clock::now();
+
+    for(size_t i = 0; i < count; i++){
+        std::string type, key, expiryLine;
+        std::getline(in, type);
+        std::getline(in, key);
+        std::getline(in, expiryLine);
+        long expirySeconds = std::stol(expiryLine);
+
+        if(type != "string" && type != "list" && type != "hash"){
+            return false; // unknown type, treat the file as corrupt
+        }
+
+        RedisValue value = readValue(in, type);
+        if(!in) return false;
+
+        auto expiryPoint = fromEpochSeconds(expirySeconds, steadyNow, sysNow);
+        if(expirySeconds != 0 && !expiryPoint.has_value()){
+            continue; // already expired, drop it
+        }
+
+        newData[key] = std::move(value);
+        if(expiryPoint.has_value()){
+            newExpiry[key] = *expiryPoint;
+        }
+    }
+
+    std::unique_lock lock(m_dbMutex);
+    m_data = std::move(newData);
+    m_expiryMap = std::move(newExpiry);
+
     return true;
 }
 
