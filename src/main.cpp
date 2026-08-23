@@ -19,16 +19,5 @@ int main(int argc, char * argv[]){
     Server dbServer(ch, port);
     dbServer.run();
 
-
-
-
-    // Database db;
-
-    // db.set("foo", "bar");
-    // db.set("munano", "chupapi");
-    // db.expire("munano", 5);
-    // std::this_thread::sleep_for(std::chrono::seconds(6));
-    // db.purgeExpired();
-    // db.debugPrint();
     
 }

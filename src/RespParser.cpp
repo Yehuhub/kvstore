@@ -1,4 +1,5 @@
 #include "../include/RespParser.h"
+#include <stdexcept>
 
 void RespParser::feed(const char* bytes, size_t len){
     m_buffer.append(bytes, len);
