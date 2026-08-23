@@ -1,6 +1,15 @@
 # kvstore
 ***
 
+## Overview
+Overview
+
+This project is a lightweight, Redis-compatible in-memory key-value database written in modern C++. It implements the Redis Serialization Protocol (RESP) and supports strings, lists, and hashes through a Redis-compatible command interface.
+
+The server is designed around concurrent client handling, with each client connection processed independently and synchronized access to the shared database. The database also includes key expiration with a background cleanup thread and custom persistence through a versioned snapshot format, allowing data and expiration times to survive server restarts.
+
+The project was built from the ground up to explore C++ systems programming concepts including networking, concurrency, synchronization, data structures, protocol parsing, resource management, and serialization.
+
 
 ## Description
 **Name:** `kvstore`
