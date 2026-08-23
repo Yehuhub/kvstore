@@ -2,31 +2,25 @@
 ***
 
 ## Overview
-Overview
 
-This project is a lightweight, Redis-compatible in-memory key-value database written in modern C++. It implements the Redis Serialization Protocol (RESP) and supports strings, lists, and hashes through a Redis-compatible command interface.
+`kvstore` is a lightweight, Redis-compatible in-memory key-value database written in modern C++. It implements the Redis Serialization Protocol (RESP) and supports strings, lists, and hashes through a Redis-compatible command interface.
 
-The server is designed around concurrent client handling, with each client connection processed independently and synchronized access to the shared database. The database also includes key expiration with a background cleanup thread and custom persistence through a versioned snapshot format, allowing data and expiration times to survive server restarts.
+The server supports concurrent client connections, with synchronized access to a shared database. It also provides key expiration with a background cleanup thread and custom persistence through a versioned snapshot format, allowing data and expiration times to survive server restarts.
 
 The project was built from the ground up to explore C++ systems programming concepts including networking, concurrency, synchronization, data structures, protocol parsing, resource management, and serialization.
 
-
 ## Description
-**Name:** `kvstore`
+
+**Name:** `kvstore`  
 **Default Port:** `6379`
 
-This project is a small Redis clone written in C++. It runs a TCP server and speaks the RESP protocol, so it works with the standard `redis-cli`. It supports:
+It supports:
 
-- **Common Commands:** PING, ECHO, FLUSHALL
-- **Key/Value:** SET, GET, KEYS, TYPE, DEL/UNLINK, EXPIRE, RENAME
-- **List:** LLEN, LPUSH/RPUSH (multi-element), LPOP/RPOP, LREM, LINDEX, LSET, LRANGE
-- **Hash:** HSET, HGET, HEXISTS, HDEL, HKEYS, HVALS, HLEN, HGETALL
+- **Common Commands:** `PING`, `ECHO`, `FLUSHALL`
+- **Key/Value:** `SET`, `GET`, `KEYS`, `TYPE`, `DEL` / `UNLINK`, `EXPIRE`, `RENAME`
+- **List:** `LLEN`, `LPUSH` / `RPUSH` (multi-element), `LPOP` / `RPOP`, `LREM`, `LINDEX`, `LSET`, `LRANGE`
+- **Hash:** `HSET`, `HGET`, `HEXISTS`, `HDEL`, `HKEYS`, `HVALS`, `HLEN`, `HGETALL`
 
-Each client connection is handled on its own thread, and the data store is guarded by a `shared_mutex` so reads can happen concurrently while writes stay exclusive.
-
-Data is persisted to a `persistence.kv` file in the working directory: it's loaded on startup and saved on graceful shutdown (`Ctrl+C`). Keys with a TTL keep expiring correctly across restarts, since expiry timestamps are converted between `steady_clock` (used at runtime) and wall-clock time (used on disk).
-
----
 
 ## Repository Structure
 
@@ -57,7 +51,6 @@ kvstore/
 └── README.md
 ```
 
----
 
 ## Installation
 This project uses a simple Makefile. Ensure you have a C++17 (or later) compiler.
@@ -69,7 +62,6 @@ This project uses a simple Makefile. Ensure you have a C++17 (or later) compiler
 make
 ```
 
----
 
 ## Usage
 After compiling the server, you can run it and use with client.
@@ -86,7 +78,6 @@ Start the server on the default port (6379) or specify a port:
 
 To gracefully shutdown and persist immediately, press `Ctrl+C`.
 
----
 
 ### Using the Server
 
@@ -107,7 +98,6 @@ OK
 "bar"
 ```
 
----
 
 ## Supported Commands
 
@@ -144,7 +134,6 @@ OK
 - **HVALS**: `HVALS <key>` → all values
 - **HGETALL**: `HGETALL <key>` → field/value pairs
 
----
 
 ## Design & Architecture
 
@@ -162,7 +151,6 @@ This project is mainly a learning exercise covering:
 - Thread-safe data access with `shared_mutex`
 - Parsing a wire protocol and mapping it to command handlers
 
----
 
 ## Testing
 
