@@ -64,6 +64,15 @@ std::optional<Command> RespParser::tryParseCommand() {
 
         Command cmd;
         cmd.m_name = (*result)[0];
+        std::transform(
+            cmd.m_name.begin(),
+            cmd.m_name.end(),
+            cmd.m_name.begin(),
+            [](unsigned char c) {
+                return static_cast<char>(std::toupper(c));
+            }
+        );
+
         for (size_t i = 1; i < result->size(); ++i){
             cmd.m_args.push_back((*result)[i]);
         }
